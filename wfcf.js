@@ -156,7 +156,12 @@ function createTableRow(data) {
 
     // Add the problem result cells
     data.problemResults.forEach(result => {
-        const problemCell = createProblemResultCell(result);
+        console.log(result);
+        const problemCell = createProblemResultCellICPC({
+            verdict: result.points === 1 ? "OK" : "RJ",
+            attempts: result.rejectedAttemptCount + result.points,
+            time: result.bestSubmissionTimeSeconds
+        }, false);
         cells.push(problemCell);
     });
 
@@ -177,28 +182,28 @@ function attemptText(result){
     return `${result.attempts} tr${result.attempts === 1 ? 'y' : 'ies'}`;
 }
 
-function createProblemResultCellICPC(result) {
+function createProblemResultCellICPC(result, freeze = true) {
     const td = document.createElement('td');
     if(!result) {
         td.innerHTML = `<span class="cell-rejected"></span>`
-    } else if(result.time <= frozenDuration){
+    } else if((!freeze || result.time <= frozenDuration) && result.attempts > 0){
         if (result.verdict === "RJ") {
             td.innerHTML = attemptText(result);
             td.style.backgroundColor = '#e87272';
         } else if(result.verdict === "OK") {
-            const acceptedSpan = document.createElement('span');
-            acceptedSpan.classList.add('cell-accepted');
+            const acceptedSpan = document.createElement('div');
+            acceptedSpan.style.fontSize = '11px';
             acceptedSpan.textContent = attemptText(result);
-            const timeSpan = document.createElement('span');
-            timeSpan.classList.add('cell-time');
+            const timeSpan = document.createElement('div');
+            timeSpan.style.fontSize = '15px';
+
             // Assuming time is in the format "hh:mm"
-            const time = `${String(Math.floor(result.time / 3600)).padStart(2, '0')}:${String(Math.floor((result.time % 3600) / 60)).padStart(2, '0')}`;
-            timeSpan.textContent = time;
-            td.appendChild(acceptedSpan);
+            timeSpan.textContent = Math.floor(result.time/60);
             td.appendChild(timeSpan);
+            td.appendChild(acceptedSpan);
             td.style.backgroundColor = '#60e760';
         }
-    } else {
+    } else if(result.attempts > 0) {
         td.innerHTML = `<span class="cell-rejected">? at ${result.attempts}</span>`
         td.style.backgroundColor = '#d1d1ff';
 
