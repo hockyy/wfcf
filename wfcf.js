@@ -1,19 +1,18 @@
 // ==UserScript==
 // @name         wfcf
 // @version      1.0
-// @description  Buat latihan wf
+// @description  To simulate icpc
 // @author       hocky
 // @match        https://codeforces.com/*
 // @match        http://codeforces.com/*
 // @grant        none
 // ==/UserScript==
 
-const selfHandle = "hocky"
+const selfHandle = "trap"
 const logURL = "https://raw.githubusercontent.com/hockyy/wfcf/main/logs.txt"
 let frozenDuration = 3600 * 4;
-frozenDuration = 3600 * 4;
 // Set the date and time in local time zone (GMT+7)
-const startEpoch = (new Date('2023-10-16T04:40:00+07:00')).getTime();
+const startEpoch = (new Date('2023-10-16T11:25:00+07:00')).getTime();
 
 function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -112,7 +111,6 @@ const simulateGhosts = async () => {
                 currentUniversity.unfrozen.problemsAttempt[problem]++;
                 if(submissionObject.verdict === "OK"){
                     if(submissionObject.time < problems[problem].firstSolver){
-                        console.log(submissionObject);
                         problems[problem].firstSolver = submissionObject.time;
                         submissionObject.firstSolve = true;
                     }
@@ -377,8 +375,7 @@ const getGymId = () => {
     const match = urlPattern.exec(currentUrl);
     if (match) {
         const gymId = match[1];
-        console.log("Found Gym ID: " + gymId);
-        return gymId;simulateGhosts
+        return gymId;
     }
     return "";
 }
