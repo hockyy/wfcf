@@ -15,6 +15,10 @@ frozenDuration = 3600 * 4;
 // Set the date and time in local time zone (GMT+7)
 const startEpoch = (new Date('2023-10-16T04:40:00+07:00')).getTime();
 
+function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
 function splitWithTail(s, delim, lim){
     let res = s.split(delim);
     let result = [];
@@ -42,8 +46,11 @@ function createUniversityTableRow(universityData, idx) {
         createTableCell(universityData.frozen.penalty, ''), // Penalty
     ];
     // Add the problem result cells
-    universityData.problems.forEach(result => {
-        const problemCell = createProblemResultCellICPC(result);
+    universityData.problems.forEach((result, problemIdx) => {
+        const frozenAttempt = universityData.frozen.problemsAttempt[problemIdx];
+        const unfrozenAttempt = universityData.unfrozen.problemsAttempt[problemIdx];
+        const pendingString = `${frozenAttempt} + ${unfrozenAttempt - frozenAttempt} ${getTriesText(unfrozenAttempt)}`
+        const problemCell = createProblemResultCellICPC(result, false, pendingString);
         cells.push(problemCell);
     });
 
@@ -53,6 +60,10 @@ function createUniversityTableRow(universityData, idx) {
     return tr;
 }
 
+const universities = [{}];
+const universitiesData = [];
+let problems = [];
+
 const simulateGhosts = async () => {
 
     return fetch(logURL)
@@ -60,12 +71,6 @@ const simulateGhosts = async () => {
         .then(data => {
         // Split the data into an array of lines
         const lines = data.split('\n');
-
-        // Initialize an array to store university data
-        const universities = [{}];
-
-        const universitiesData = [];
-        let problems = [];
         const now = Date.now(); // Unix timestamp in millisecondsc
         const durationPassed = (now - startEpoch) / 1000;
 
@@ -82,11 +87,13 @@ const simulateGhosts = async () => {
                     problems: Array(problems.length).fill(0),
                     unfrozen: {
                         ok: 0,
-                        penalty: 0
+                        penalty: 0,
+                        problemsAttempt: Array(problems.length).fill(0),
                     },
                     frozen: {
                         ok: 0,
-                        penalty: 0
+                        penalty: 0,
+                        problemsAttempt: Array(problems.length).fill(0),
                     },
                 });
             } else if (parts[0] === '@s') {
@@ -102,20 +109,27 @@ const simulateGhosts = async () => {
                 if(currentUniversity.problems[problem] && currentUniversity.problems[problem].verdict === "OK"){
                     continue;
                 }
-                currentUniversity.problems[problem] = submissionObject;
+                currentUniversity.unfrozen.problemsAttempt[problem]++;
                 if(submissionObject.verdict === "OK"){
+                    if(submissionObject.time < problems[problem].firstSolver){
+                        console.log(submissionObject);
+                        problems[problem].firstSolver = submissionObject.time;
+                        submissionObject.firstSolve = true;
+                    }
                     currentUniversity.unfrozen.ok++;
                     currentUniversity.unfrozen.penalty += submissionObject.time / 60 + (submissionObject.attempts - 1) * problems[problem].penalty;
                 }
                 if(time <= frozenDuration){
-                    currentUniversity.frozen = currentUniversity.unfrozen;
+                    currentUniversity.frozen = deepClone(currentUniversity.unfrozen);
                 }
+                currentUniversity.problems[problem] = submissionObject;
             } else if(parts[0] === "@p"){
                 const splittedData = splitWithTail(parts[1], ',', 4);
                 problems.push({
                     letter: splittedData[0],
                     title: splittedData[1],
-                    penalty: parseInt(splittedData[2])
+                    penalty: parseInt(splittedData[2]),
+                    firstSolver: 999999999999
                 });
             }
         }
@@ -124,8 +138,8 @@ const simulateGhosts = async () => {
         // Now 'universitiesData' holds university information, and 'universities' holds problem results for each university.
         // Sort universities by points in descending order and then by penalty in ascending order
         universities.sort((a, b) => {
-            if(a.unfrozen.ok !== b.unfrozen.ok) return b.unfrozen.ok - a.unfrozen.ok;
-            return a.unfrozen.penalty - b.unfrozen.penalty;
+            if(a.frozen.ok !== b.frozen.ok) return b.frozen.ok - a.frozen.ok;
+            return a.frozen.penalty - b.frozen.penalty;
         });
         // Create a table row for each university and append it to the table
         const tbody = $('table.standings tbody');
@@ -155,13 +169,14 @@ function createTableRow(data) {
     ];
 
     // Add the problem result cells
-    data.problemResults.forEach(result => {
-        console.log(result);
+    data.problemResults.forEach((result, idx) => {
+        const isFirstSolve = (result.points === 1 && result.bestSubmissionTimeSeconds <= problems[idx].firstSolver);
         const problemCell = createProblemResultCellICPC({
             verdict: result.points === 1 ? "OK" : "RJ",
             attempts: result.rejectedAttemptCount + result.points,
-            time: result.bestSubmissionTimeSeconds
-        }, false);
+            time: result.bestSubmissionTimeSeconds,
+            firstSolve: isFirstSolve
+        }, true);
         cells.push(problemCell);
     });
 
@@ -178,15 +193,19 @@ function createTableCell(content, className) {
     return td;
 }
 
-function attemptText(result){
-    return `${result.attempts} tr${result.attempts === 1 ? 'y' : 'ies'}`;
+function getTriesText(attempts){
+    return `tr${attempts === 1 ? 'y' : 'ies'}`;
 }
 
-function createProblemResultCellICPC(result, freeze = true) {
+function attemptText(result){
+    return `${result.attempts} ${getTriesText(result.attempts)}`;
+}
+
+function createProblemResultCellICPC(result, selfEntry = false, pendingString = "") {
     const td = document.createElement('td');
     if(!result) {
         td.innerHTML = `<span class="cell-rejected"></span>`
-    } else if((!freeze || result.time <= frozenDuration) && result.attempts > 0){
+    } else if((selfEntry || result.time <= frozenDuration) && result.attempts > 0){
         if (result.verdict === "RJ") {
             td.innerHTML = attemptText(result);
             td.style.backgroundColor = '#e87272';
@@ -202,10 +221,12 @@ function createProblemResultCellICPC(result, freeze = true) {
             td.appendChild(timeSpan);
             td.appendChild(acceptedSpan);
             td.style.backgroundColor = '#60e760';
+            if(result.firstSolve) td.style.backgroundColor = '#1daa1d';
+            if(result.firstSolve && selfEntry) td.style.backgroundColor = '#fae900';
         }
     } else if(result.attempts > 0) {
-        td.innerHTML = `<span class="cell-rejected">? at ${result.attempts}</span>`
-        td.style.backgroundColor = '#d1d1ff';
+        td.innerHTML = `<span style="font-size: 10px">${pendingString}</span>`
+        td.style.backgroundColor = '#66f';
 
     }
     return td;
@@ -340,8 +361,6 @@ const obtainSelfGymData = (gymId) => {
             return row.party.participantType === "VIRTUAL" && row.party.teamName !== "";
         });
         if (filteredRows) {
-            console.log("OK")
-            console.log(filteredRows[0]);
             const rowData = filteredRows[0];
             return [rowData, createTableRow(rowData)];
         }
@@ -353,7 +372,7 @@ const obtainSelfGymData = (gymId) => {
 }
 
 const getGymId = () => {
-    const urlPattern = /http[s]?:\/\/codeforces\.com\/gym\/(\d+)\/standings/;
+    const urlPattern = /http[s]?:\/\/codeforces\.com\/gym\/(\d+)\/standings\/friends/;
     const currentUrl = window.location.href;
     const match = urlPattern.exec(currentUrl);
     if (match) {
@@ -371,6 +390,8 @@ const getGymId = () => {
     $('a[title="Participants solved the problem"]').remove();
     $('th:contains("Time")').remove();
     $('th:contains("Memory")').remove();
+    $('table.status-frame-datatable tbody tr th:contains("#")').remove();
+    $('tr[data-submission-id] td.id-cell').remove();
     $('a:contains("Status")').remove();
     $('a:contains("Standings")').attr('href', function(i, currentHref) {
         return currentHref + '/friends/true';
@@ -382,6 +403,7 @@ const getGymId = () => {
 
     const gymId = getGymId();
     if (gymId !== "") {
+        $('table.standings tbody tr[participantid]').remove();
         simulateGhosts().then(() => {
             const standingsTable = $('table.standings tbody');
             const statisticsRow = $('tr.standingsStatisticsRow');
