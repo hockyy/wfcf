@@ -65,6 +65,7 @@ let problems = [];
 
 const simulateGhosts = async () => {
 
+    // return fetch(logURL, {cache: "no-cache"})
     return fetch(logURL)
         .then(response => response.text())
         .then(data => {
