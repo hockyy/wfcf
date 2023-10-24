@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         wfcf
 // @version      1.0
-// @description  To simulate icpc
+// @description  Buat latihan wf
 // @author       hocky
 // @match        https://codeforces.com/*
 // @match        http://codeforces.com/*
 // @grant        none
 // ==/UserScript==
 
-const selfHandle = "trap"
+const selfHandle = "hocky"
 const logURL = "https://raw.githubusercontent.com/hockyy/wfcf/main/logs.txt"
-let frozenDuration = 3600 * 4;
+let frozenDuration = 3600 * 5;
 // Set the date and time in local time zone (GMT+7)
 const startEpoch = (new Date('2023-10-16T11:25:00+07:00')).getTime();
 
@@ -42,7 +42,7 @@ function createUniversityTableRow(universityData, idx) {
         createTableCell(idx, 'left'), // Rank
         createContestantCell({name: universityData.name}, ''), // Team and Members
         createTableCell(universityData.frozen.ok, ''), // Points
-        createTableCell(universityData.frozen.penalty, ''), // Penalty
+        createTableCell(Math.round(universityData.frozen.penalty), ''), // Penalty
     ];
     // Add the problem result cells
     universityData.problems.forEach((result, problemIdx) => {
@@ -65,7 +65,6 @@ let problems = [];
 
 const simulateGhosts = async () => {
 
-    // return fetch(logURL, {cache: "no-cache"})
     return fetch(logURL)
         .then(response => response.text())
         .then(data => {
@@ -110,7 +109,9 @@ const simulateGhosts = async () => {
                     continue;
                 }
                 currentUniversity.unfrozen.problemsAttempt[problem]++;
+                problems[problem].totalAttempt++;
                 if(submissionObject.verdict === "OK"){
+                    if(time <= frozenDuration) problems[problem].totalOK++;
                     if(submissionObject.time < problems[problem].firstSolver){
                         problems[problem].firstSolver = submissionObject.time;
                         submissionObject.firstSolve = true;
@@ -128,6 +129,8 @@ const simulateGhosts = async () => {
                     letter: splittedData[0],
                     title: splittedData[1],
                     penalty: parseInt(splittedData[2]),
+                    totalOK: 0,
+                    totalAttempt: 0,
                     firstSolver: 999999999999
                 });
             }
@@ -146,6 +149,21 @@ const simulateGhosts = async () => {
             const universityTableRow = createUniversityTableRow(universityData, idx + 1);
             tbody.append(universityTableRow);
         });
+
+        const trResult = document.createElement('tr');
+
+        // Create the table cells
+        const cells = [
+            createTableCell('', 'left'),
+            createTableCell('Total', ''),
+            createTableCell('', ''),
+            createTableCell('', ''),
+        ];
+        problems.forEach((problem, problemIdx) => {
+            cells.push(createACcell(problem.totalOK, problem.totalAttempt));
+        });
+        cells.forEach(cell => trResult.appendChild(cell));
+        tbody.append(trResult);
 
         return 1;
     })
@@ -189,6 +207,12 @@ function createTableCell(content, className) {
     const td = document.createElement('td');
     if (className) td.classList.add(className);
     td.textContent = content;
+    return td;
+}
+
+function createACcell(ok, tries) {
+    const td = document.createElement('td');
+    td.innerHTML = `<div style="font-size: 10px; color: green; font-weight:bold;">${ok}</div><div style="font-size: 10px; color: blue; font-weight:bold;">${tries}</div>`
     return td;
 }
 
